@@ -22,6 +22,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="BitcoinBot.py" />
+    <Compile Include="bot_commands.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="bot_utilities.py" />
+    <Compile Include="database.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
