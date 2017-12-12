@@ -100,7 +100,7 @@ def parse_number_from_command(command):
     try :
         num_found = float(''.join([c for c in str_cmd if c in '.0123456789']))
     except :
-        return 0
+        return -9999 # error code
 
     return num_found
 
@@ -125,11 +125,23 @@ def user_is_active(user):
 def wallet_ballance(user) :
     db = database.Database()
     records = db.fetchAll("""
-                            select user_id, coin_type, sum(amount) as purchased, sum(usd_spent) as usd_spent
-                            from purchases
-                            where user_id = %s
-                            group by user_id, coin_type
-                        """,[user])
+                            select p.user_id, p.coin_type, sal.sold, sum(p.amount) as purchased, sal.usd_gained, sum(p.usd) as usd_spent,  sum(p.amount) - sal.sold as balance from
+                            (select s.user_id, s.coin_type, sum(s.amount) as sold, sum(s.usd) as usd_gained
+                            from transactions s
+                            where s.user_id = %s and s.type = "sale"
+                            group by s.user_id, s.coin_type) as sal
+
+                            right outer join transactions p on sal.user_id = p.user_id and sal.coin_type = p.coin_type
+                            where p.user_id = %s and p.type = "purchase"
+                            group by p.user_id, p.coin_type
+                        """,[user, user])
+
+    # clean records.  Replace nulls with 0
+    for record in records :
+        if record['sold'] is None:
+            record['sold'] = 0
+            record['balance'] = record['purchased']
+            record['usd_gained'] = 0
 
     return records
 
@@ -173,15 +185,17 @@ def get_current_price(type = "btc") :
 
 # expects a type in the request and if the user is currently adding a record, return true
 def user_is_adding_record(user, type) :
-    if type == 'purchase' :
-        db = database.Database()
-        if type  == "purchase" :
-            records = db.fetchAll("""select * from purchases where record_complete = 0 and last_updated > now() - interval 30 minute and user_id = %s""",[user])
+    db = database.Database()
+    if type  == "purchase" :
+        records = db.fetchAll("""select * from purchases where record_complete = 0 and last_updated > now() - interval 30 minute and user_id = %s""",[user])
 
+    elif type == "sale" :
+        records = db.fetchAll("""select * from sales where record_complete = 0 and last_updated > now() - interval 30 minute and user_id = %s""",[user])
         
-        if len(records) > 0 :
-            return True
-        db.close()
+    if len(records) > 0 :
+        return True
+    db.close()
+
 
     return False
 

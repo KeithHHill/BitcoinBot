@@ -61,6 +61,8 @@ _______\n
 *SHOW MY TRANSACTIONS*: lists your transactions\n
 *DELETE PURCHASE #*: deletes indicated purchase transaction\n
 *DELETE SALE #*: deletes indicated sale transaction\n
+ \n
+_tip: if you need to remove coin due to fees, log a sale for $0_\n
 _______\n
                     """
     
@@ -69,14 +71,16 @@ _______\n
         deffered = True
 
     elif 'balance' in command :
-        response = "I can't do this yet.  Check back later"  #needs dev
+        bot_commands.whats_balance(user,channel,command)
+        deffered = True
 
     elif command.startswith('i bought') :
         bot_commands.add_purchase(user,channel,command)
         deffered = True
 
     elif command.startswith('i sold') :
-        response = "I can't do this yet.  Check back later"  #needs dev
+        bot_commands.add_sale(user,channel,command)
+        deffered = True
 
     elif ('show' in command or 'list' in command) and 'transaction' in command :
         bot_commands.list_transactions(user,channel,command)
@@ -88,7 +92,8 @@ _______\n
         deffered = True
 
     elif command.startswith('delete sale') :
-        response = "I can't do this yet.  Check back later"  #needs dev
+        bot_commands.delete_transaction(user,channel,command,"sale")
+        deffered = True
 
     elif command.startswith("go kill yourself") and user == admin_user :
         bot_utilities.log_event("self destruct activated")
@@ -96,8 +101,12 @@ _______\n
         sys.exit()
 
 
-    elif bot_utilities.user_is_adding_record(user, "purchase") :
+    elif bot_utilities.user_is_adding_record(user, "purchase") : # determine if the user is currently working to create a purchase record
         bot_commands.handle_ongoing_record_creation(user,channel,command,"purchase")
+        deffered = True
+
+    elif bot_utilities.user_is_adding_record(user, "sale") : # determine if the user is currently working to create a sale record
+        bot_commands.handle_ongoing_record_creation(user,channel,command,"sale")
         deffered = True
 
     if deffered == False :
