@@ -153,10 +153,12 @@ def provide_profit_info(user,channel,command):
                                 order by date asc limit 1""",[user])
     
     # get the change in value for the day
-    day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
-    day_change_dec = ((Decimal(total_value)-total_spent) - day_gain ) / day_gain
-    day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
-
+    try :
+        day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
+        day_change_dec = ((Decimal(total_value)-total_spent) - day_gain ) / day_gain
+        day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
+    except :
+        day_change = "error"
 
     month_record = db.fetchAll("""select user_id, total_spent, total_value 
                                 from performance_log 
@@ -164,10 +166,12 @@ def provide_profit_info(user,channel,command):
                                 order by date asc limit 1""",[user])
     
     # get the change in value for the month
-    month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
-    month_change_dec = ((Decimal(total_value)-total_spent) - month_gain ) / month_gain
-    month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
-
+    try: 
+        month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
+        month_change_dec = ((Decimal(total_value)-total_spent) - month_gain ) / month_gain
+        month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
+    except :
+        month_change = "error"
     
     db.close()
 
