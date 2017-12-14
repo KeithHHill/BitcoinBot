@@ -6,6 +6,7 @@ import sys
 from slackclient import SlackClient
 import database
 import requests
+from math import floor
 
 # get config
 myPath = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +26,10 @@ slack_client = SlackClient(token)
 
 
 
+
+def floored_percentage(val, digits):
+    val *= 10 ** (digits + 2)
+    return '{1:.{0}f}%'.format(digits, floor(val) / 10 ** digits)
 
 
 # logs a message to the bot log channel
@@ -198,6 +203,47 @@ def user_is_adding_record(user, type) :
 
 
     return False
+
+
+# called on a scheduled task to log current rates and values of wallets
+def log_performance():
+    # get a list of users on the server
+    db = database.Database()
+    users = db.fetchAll("select distinct user_id from purchases where record_complete = 1 group by user_id")
+
+    #fetch current rates for the coins
+    current_btc_price = get_current_price("btc")
+    current_ltc_price = get_current_price("ltc")
+    current_eth_price = get_current_price("eth")
+
+    # for each user, get the balance
+    for user in users:
+        # get wallet balances
+        wallets = wallet_ballance(user["user_id"])
+
+        btc_worth = 0
+        eth_worth = 0
+        ltc_worth = 0
+        total_spent = 0
+
+        for wallet in wallets:
+            if wallet["coin_type"] == "btc":
+                btc_worth = float(wallet["balance"]) * current_btc_price
+            elif wallet["coin_type"] == "eth":
+                eth_worth = float(wallet["balance"]) * current_eth_price
+            elif wallet["coin_type"] == "ltc":
+                ltc_worth = float(wallet["balance"]) * current_ltc_price
+            #sum total spent
+            total_spent = total_spent + wallet["usd_spent"]
+  
+        total_value = round(btc_worth + eth_worth + ltc_worth,2)
+
+        #write the record
+        db.runSql("""insert into performance_log (user_id,date,btc_value,ltc_value,eth_value,total_spent, total_value) values(%s,now(),%s,%s,%s,%s,%s)
+                    """,[user["user_id"],current_btc_price, current_ltc_price, current_eth_price,total_spent,total_value])
+
+    log_event("Performance logged")
+    db.close()
 
 
 if __name__ == "__main__": #to depricate

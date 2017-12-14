@@ -9,6 +9,7 @@ import bot_utilities
 import database
 import requests
 import json
+from decimal import Decimal
 
 
 # get config
@@ -144,9 +145,37 @@ def provide_profit_info(user,channel,command):
   
     total_value = round(btc_worth + eth_worth + ltc_worth,2)
     
+    # fetch the values to compare to day/month
+    db = database.Database()
+    day_record = db.fetchAll("""select user_id, total_spent, total_value 
+                                from performance_log 
+                                where user_id = %s and date > now() - interval 24 hour
+                                order by date asc limit 1""",[user])
+    
+    # get the change in value for the day
+    day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
+    day_change_dec = ((Decimal(total_value)-total_spent) - day_gain ) / day_gain
+    day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
+
+
+    month_record = db.fetchAll("""select user_id, total_spent, total_value 
+                                from performance_log 
+                                where user_id = %s and date > now() - interval 30 day
+                                order by date asc limit 1""",[user])
+    
+    # get the change in value for the month
+    month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
+    month_change_dec = ((Decimal(total_value)-total_spent) - month_gain ) / month_gain
+    month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
+
+    
+    db.close()
+
     response = "*Spent:* $" + str(total_spent)+ "\n" \
         "*Value:* $" + str(total_value) + "\n" \
-        "*CHANGE:* $" + str(round(total_value-float(total_spent),2))
+        "*CHANGE:* $" + str(round(total_value-float(total_spent),2)) + "\n \n" \
+        "_day: " + day_change + "_\n" \
+        "_month: " + month_change+"_"
     
 
     bot_utilities.log_event(user + " requested performance: " + command)
