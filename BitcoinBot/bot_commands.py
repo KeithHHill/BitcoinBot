@@ -144,6 +144,7 @@ def provide_profit_info(user,channel,command):
         total_spent = total_spent + wallet["usd_spent"]
   
     total_value = round(btc_worth + eth_worth + ltc_worth,2)
+    total_change = round(total_value-float(total_spent),2)  # value-spent
     
     # fetch the values to compare to day/month
     db = database.Database()
@@ -157,8 +158,11 @@ def provide_profit_info(user,channel,command):
         day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
         day_change_dec = ((Decimal(total_value)-total_spent) - day_gain ) / day_gain
         day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
+        
+        day_growth_str = "$"+str(round(Decimal(total_change) - day_gain,2))
     except :
-        day_change = "error"
+        day_change = ""
+        day_growth_str = "error"
 
     month_record = db.fetchAll("""select user_id, total_spent, total_value 
                                 from performance_log 
@@ -170,16 +174,22 @@ def provide_profit_info(user,channel,command):
         month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
         month_change_dec = ((Decimal(total_value)-total_spent) - month_gain ) / month_gain
         month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
+        
+        month_growth_str = "$"+str(round(Decimal(total_change) - month_gain,2))
     except :
-        month_change = "error"
+        month_change = ""
+        month_growth_str = "error"
+
     
     db.close()
 
+    total_change = round(total_value-float(total_spent),2)  # value-spent
+
     response = "*Spent:* $" + str(total_spent)+ "\n" \
         "*Value:* $" + str(total_value) + "\n" \
-        "*CHANGE:* $" + str(round(total_value-float(total_spent),2)) + "\n \n" \
-        "_day: " + day_change + "_\n" \
-        "_month: " + month_change+"_"
+        "*CHANGE:* $" + str(total_change) + " _(" + bot_utilities.floored_percentage((Decimal(total_change)/total_spent),2) + ")_ \n \n" \
+        "_growth today: "+ day_growth_str + " (" + day_change + ")_\n" \
+        "_30 day growth: " + month_growth_str + " (" + month_change+")_"
     
 
     bot_utilities.log_event(user + " requested performance: " + command)
@@ -394,6 +404,27 @@ def add_usd_to_sale(user,channel,command,purchase_id) :
         db.close()
 
     bot_utilities.post_to_channel(channel,response)
+
+
+# lets the user request the current crypto prices
+def show_prices(user,channel,command) :
+    response = "something went wrong - show prices"
+    btc_price = bot_utilities.get_current_price("btc")
+    ltc_price = bot_utilities.get_current_price("ltc")
+    eth_price = bot_utilities.get_current_price("eth")
+
+    response = "*BTC*: $" + str(btc_price) + "\n " \
+        "*ETH*: $" + str(eth_price) + "\n"\
+        "*LTC*: $" + str(ltc_price) + "\n"
+
+    bot_utilities.post_to_channel(channel, response)
+
+    bot_utilities.log_event(user + " requested prices: " + command)
+
+
+
+
+
 
 # user is in the middle of creating a record.  Handle it
 def handle_ongoing_record_creation (user, channel, command, record_type):

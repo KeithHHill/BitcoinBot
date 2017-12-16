@@ -86,6 +86,9 @@ _______\n
         bot_commands.list_transactions(user,channel,command)
         deffered = True
 
+    elif ('list' in command or 'show' in command) and 'price' in command :
+        bot_commands.show_prices(user,channel,command)
+        deffered = True
 
     elif command.startswith('delete purchase') :
         bot_commands.delete_transaction(user,channel,command,"purchase")
