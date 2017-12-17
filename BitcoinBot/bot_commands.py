@@ -413,9 +413,30 @@ def show_prices(user,channel,command) :
     ltc_price = bot_utilities.get_current_price("ltc")
     eth_price = bot_utilities.get_current_price("eth")
 
-    response = "*BTC*: $" + str(btc_price) + "\n " \
-        "*ETH*: $" + str(eth_price) + "\n"\
-        "*LTC*: $" + str(ltc_price) + "\n"
+    db = database.Database()
+    # fetch the prices at the beginning of the day
+    records = db.fetchAll("""select btc_value, ltc_value, eth_value
+                                from performance_log 
+                                where date > now() - interval 24 hour
+                                order by date asc limit 1""")
+
+    try:
+        # get the change in values and turn them to percentages
+        day_start = records[0]
+
+        btc_change_pct = bot_utilities.floored_percentage((btc_price-float(day_start['btc_value'])) / float(day_start['btc_value']),2)
+        ltc_change_pct = bot_utilities.floored_percentage((ltc_price-float(day_start['ltc_value'])) / float(day_start['ltc_value']),2)
+        eth_change_pct = bot_utilities.floored_percentage((eth_price-float(day_start['eth_value'])) / float(day_start['eth_value']),2)
+
+    except : # job didn't run for some reason and we don't have valid data
+        btc_change_pct = "error"
+        ltc_change_pct = "error"
+        eth_change_pct = "error"
+
+
+    response = "*BTC*: $" + str(btc_price) + " _(" + btc_change_pct +")_\n" \
+        "*ETH*: $" + str(eth_price)  + " _(" + eth_change_pct +")_\n"\
+        "*LTC*: $" + str(ltc_price)  + " _(" + ltc_change_pct +")_\n"
 
     bot_utilities.post_to_channel(channel, response)
 
