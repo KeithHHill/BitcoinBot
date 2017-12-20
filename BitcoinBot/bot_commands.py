@@ -109,7 +109,7 @@ def list_transactions(user,channel,command) :
     response = "ID | trans | coin | amount | USD | date \n"
 
     for record in records :
-        response = response + str(record["purchase_id"]) + " | " + record["type"] + " | " + record["coin_type"] + " | " + str(record["amount"]) + " | $" + str(record["usd_spent"]) + " | " + str(record["date"]) + "\n"
+        response = response + str(record["purchase_id"]) + " | " + record["type"] + " | " + record["coin_type"].upper() + " | " + str(record["amount"]) + " | $" + str(record["usd_spent"]) + " | " + str(record["date"]) + "\n"
 
     bot_utilities.post_to_channel(channel,response)
     bot_utilities.log_event(user + " listed transactions")
@@ -122,32 +122,33 @@ def provide_profit_info(user,channel,command):
     # get the user's current ballance
     wallets = bot_utilities.wallet_ballance(user)
 
+    db = database.Database()
+    # get supported coins
+    coins = db.fetchAll("select *, 0.0 as current_value, 0.0 as current_worth from supported_coins")
+
 
     # find the current rates
-    current_btc_price = bot_utilities.get_current_price("btc")
-    current_ltc_price = bot_utilities.get_current_price("ltc")
-    current_eth_price = bot_utilities.get_current_price("eth")
+    for coin in coins :
+        coin['current_value'] = Decimal(bot_utilities.get_current_price(coin['coin_id'].lower()))
 
-    btc_worth = 0
-    eth_worth = 0
-    ltc_worth = 0
+
     total_spent = 0
+    total_worth = 0
 
+    # match the wallets with the coins and populate the current worth
     for wallet in wallets:
-        if wallet["coin_type"] == "btc":
-            btc_worth = float(wallet["balance"]) * current_btc_price
-        elif wallet["coin_type"] == "eth":
-            eth_worth = float(wallet["balance"]) * current_eth_price
-        elif wallet["coin_type"] == "ltc":
-            ltc_worth = float(wallet["balance"]) * current_ltc_price
-        #sum total spent
+        for coin in coins :
+            if wallet["coin_type"] == coin["coin_id"].lower():
+                wallet["current_worth"] = wallet["balance"] * coin["current_value"]
+        #sum total spent and worth
         total_spent = total_spent + wallet["usd_spent"]
+        total_worth = total_worth + wallet["current_worth"]
   
-    total_value = round(btc_worth + eth_worth + ltc_worth,2)
-    total_change = round(total_value-float(total_spent),2)  # value-spent
+    total_worth = round(total_worth,2)
+    total_change = total_worth-float(total_spent)  # worth-spent
+
     
     # fetch the values to compare to day/month
-    db = database.Database()
     day_record = db.fetchAll("""select user_id, total_spent, total_value 
                                 from performance_log 
                                 where user_id = %s and date > now() - interval 24 hour
@@ -156,7 +157,7 @@ def provide_profit_info(user,channel,command):
     # get the change in value for the day
     try :
         day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
-        day_change_dec = ((Decimal(total_value)-total_spent) - day_gain ) / day_gain
+        day_change_dec = ((Decimal(total_worth)-total_spent) - day_gain ) / day_gain
         day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
         
         day_growth_str = "$"+str(round(Decimal(total_change) - day_gain,2))
@@ -172,7 +173,7 @@ def provide_profit_info(user,channel,command):
     # get the change in value for the month
     try: 
         month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
-        month_change_dec = ((Decimal(total_value)-total_spent) - month_gain ) / month_gain
+        month_change_dec = ((Decimal(total_worth)-total_spent) - month_gain ) / month_gain
         month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
         
         month_growth_str = "$"+str(round(Decimal(total_change) - month_gain,2))
@@ -183,10 +184,10 @@ def provide_profit_info(user,channel,command):
     
     db.close()
 
-    total_change = round(total_value-float(total_spent),2)  # value-spent
+    
 
     response = "*Spent:* $" + str(total_spent)+ "\n" \
-        "*Value:* $" + str(total_value) + "\n" \
+        "*Value:* $" + str(total_worth) + "\n" \
         "*CHANGE:* $" + str(total_change) + " _(" + bot_utilities.floored_percentage((Decimal(total_change)/total_spent),2) + ")_ \n \n" \
         "_growth today: "+ day_growth_str + " (" + day_change + ")_\n" \
         "_30 day growth: " + month_growth_str + " (" + month_change+")_"
@@ -203,18 +204,17 @@ def add_purchase(user,channel,command) :
     # verify no current record is incomplete.  If so, blow it away
     db.runSql("""delete from purchases where record_complete = 0 and user_id = %s""",[user])
 
+    # get supported coins
+    supported_coins = db.fetchAll("select * from supported_coins order by sort_order desc")
 
     # did user give type?
     coin = None
-    if "bitcoin" in command :
-        coin = "btc"
+    for supported_coin in supported_coins :
+        if supported_coin["coin_name"].lower() in command :
+            coin = supported_coin["coin_id"]
+            break
 
-    elif "ethereum" in command :
-        coin = "eth"
-
-    elif "litecoin" in command :
-        coin = "ltc"
-
+    
 
     # begin purchase record
     if coin != None :
@@ -237,18 +237,20 @@ def add_type_to_purchase(user,channel,command,purchase_id):
     # check that a type was indicated in the command
     response = "something went wrong - add_type_to_purchase"
 
+    db = database.Database()
+    # get supported coins
+    supported_coins = db.fetchAll("select * from supported_coins order by sort_order desc")
+    db.close()
+
+    # did user give type?
     coin = None
-    if "bitcoin" in command :
-        coin = "btc"
-
-    elif "ethereum" in command :
-        coin = "eth"
-
-    elif "litecoin" in command :
-        coin = "ltc"
+    for supported_coin in supported_coins :
+        if supported_coin["coin_name"].lower() in command :
+            coin = supported_coin["coin_id"]
+            break
 
     if coin == None :
-        response = "Sorry, you didn't give me a crypto type.  I accept bitcoin, ethereum, and litecoin."
+        response = "Sorry, you didn't give me a supported crypto type."
         bot_utilities.log_event("expected coin type and failed:" + user + ": " + command)
 
     else :
@@ -258,6 +260,7 @@ def add_type_to_purchase(user,channel,command,purchase_id):
         response = "Sounds great.  How much " + coin.upper() + " did you buy?"
         
     bot_utilities.post_to_channel(channel,response)
+
 
 
 # user is creating a record. adding amount
@@ -308,18 +311,15 @@ def add_sale(user,channel,command) :
     # verify no current record is incomplete.  If so, blow it away
     db.runSql("""delete from sales where record_complete = 0 and user_id = %s""",[user])
 
+    # get supported coins
+    supported_coins = db.fetchAll("select * from supported_coins order by sort_order desc")
 
     # did user give type?
     coin = None
-    if "bitcoin" in command :
-        coin = "btc"
-
-    elif "ethereum" in command :
-        coin = "eth"
-
-    elif "litecoin" in command :
-        coin = "ltc"
-
+    for supported_coin in supported_coins :
+        if supported_coin["coin_name"].lower() in command :
+            coin = supported_coin["coin_id"]
+            break
 
     # begin sale record
     if coin != None :
@@ -342,18 +342,21 @@ def add_type_to_sale(user,channel,command,purchase_id):
     # check that a type was indicated in the command
     response = "something went wrong - add_type_to_sale"
 
+    db = database.Database()
+    # get supported coins
+    supported_coins = db.fetchAll("select * from supported_coins order by sort_order desc")
+    db.close()
+
+    # did user give type?
     coin = None
-    if "bitcoin" in command :
-        coin = "btc"
+    for supported_coin in supported_coins :
+        if supported_coin["coin_name"].lower() in command :
+            coin = supported_coin["coin_id"]
+            break
 
-    elif "ethereum" in command :
-        coin = "eth"
-
-    elif "litecoin" in command :
-        coin = "ltc"
 
     if coin == None :
-        response = "Sorry, you didn't give me a crypto type.  I accept bitcoin, ethereum, and litecoin."
+        response = "Sorry, you didn't give me a valid crypto type."
         bot_utilities.log_event("expected coin type and failed:" + user + ": " + command)
 
     else :
@@ -405,44 +408,38 @@ def add_usd_to_sale(user,channel,command,purchase_id) :
 
     bot_utilities.post_to_channel(channel,response)
 
-
+   
 # lets the user request the current crypto prices
 def show_prices(user,channel,command) :
-    response = "something went wrong - show prices"
-    btc_price = bot_utilities.get_current_price("btc")
-    ltc_price = bot_utilities.get_current_price("ltc")
-    eth_price = bot_utilities.get_current_price("eth")
+    response = ""
 
     db = database.Database()
-    # fetch the prices at the beginning of the day
-    records = db.fetchAll("""select btc_value, ltc_value, eth_value
-                                from performance_log 
-                                where date > now() - interval 24 hour
-                                order by date asc limit 1""")
+    coins = db.fetchAll("select * from supported_coins order by sort_order asc")
 
-    try:
-        # get the change in values and turn them to percentages
-        day_start = records[0]
+    for coin in coins :
+        # fetch the previous pice
+        records = db.fetchAll("""select * 
+                                from price_history 
+                                where coin = %s and date > now()-interval 24 hour order by date asc limit 1""",[coin['coin_id']])
+        
+        current_price = bot_utilities.get_current_price(coin['coin_id'].lower())
 
-        btc_change_pct = bot_utilities.floored_percentage((btc_price-float(day_start['btc_value'])) / float(day_start['btc_value']),2)
-        ltc_change_pct = bot_utilities.floored_percentage((ltc_price-float(day_start['ltc_value'])) / float(day_start['ltc_value']),2)
-        eth_change_pct = bot_utilities.floored_percentage((eth_price-float(day_start['eth_value'])) / float(day_start['eth_value']),2)
+        try : # in case prices didn't get logged
+            start_price = records[0]['price']
+            change_pct = bot_utilities.floored_percentage((current_price-float(start_price)) / float(start_price),2)
 
-    except : # job didn't run for some reason and we don't have valid data
-        btc_change_pct = "error"
-        ltc_change_pct = "error"
-        eth_change_pct = "error"
+        except:  
+            start_price = 0
+            change_pct = "error"
+        
 
+        # add to response
+        response = response + "*" + coin['coin_id'] + ":* $" + str(current_price) + " _(" + str(change_pct) + ")_ \n"
 
-    response = "*BTC*: $" + str(btc_price) + " _(" + btc_change_pct +")_\n" \
-        "*ETH*: $" + str(eth_price)  + " _(" + eth_change_pct +")_\n"\
-        "*LTC*: $" + str(ltc_price)  + " _(" + ltc_change_pct +")_\n"
-
+    
     bot_utilities.post_to_channel(channel, response)
 
     bot_utilities.log_event(user + " requested prices: " + command)
-
-
 
 
 

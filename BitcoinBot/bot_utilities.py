@@ -130,7 +130,7 @@ def user_is_active(user):
 def wallet_ballance(user) :
     db = database.Database()
     records = db.fetchAll("""
-                            select p.user_id, p.coin_type, sal.sold, sum(p.amount) as purchased, sal.usd_gained, sum(p.usd) as usd_spent,  sum(p.amount) - sal.sold as balance from
+                            select p.user_id, p.coin_type, sal.sold, sum(p.amount) as purchased, sal.usd_gained, sum(p.usd) as usd_spent,  sum(p.amount) - sal.sold as balance, 0.0 as current_worth from
                             (select s.user_id, s.coin_type, sum(s.amount) as sold, sum(s.usd) as usd_gained
                             from transactions s
                             where s.user_id = %s and s.type = "sale"
@@ -172,19 +172,24 @@ def request(url, proxies=''):
     return data
 
 
+
 def get_current_price(type = "btc") :
-    response = request("https://api.coinbase.com/v2/prices/"+ type+"-USD/spot")
-    
-    try:
-        curPrice = response["data"]["amount"]
-       
-        curPrice = float(curPrice) #convert to number
+    # find proper source for the coin
+    db = database.Database()
+    coins = db.fetchAll("""select source from supported_coins where coin_id = %s""",[type.upper()])
+    db.close()
 
-        return curPrice
+    if coins[0]['source'] == "coinbase":
+        response = request("https://api.coinbase.com/v2/prices/"+ type+"-USD/spot")
+        try:
+            curPrice = response["data"]["amount"]   
+            curPrice = float(curPrice) #convert to number
 
-    except :
-        log_event("attempted to get the current Coinbase price and failed to get a response")
-        return 0
+            return curPrice
+
+        except :
+            log_event("attempted to get the current Coinbase price and failed to get a response")
+            return 0
 
     return 0
 
@@ -211,36 +216,33 @@ def log_performance():
     db = database.Database()
     users = db.fetchAll("select distinct user_id from purchases where record_complete = 1 group by user_id")
 
-    #fetch current rates for the coins
-    current_btc_price = get_current_price("btc")
-    current_ltc_price = get_current_price("ltc")
-    current_eth_price = get_current_price("eth")
+    # fetch supported coins
+    coins = db.fetchAll("select * from supported_coins")
+    #fetch current rates for the coins and record the rates
+    for coin in coins :
+        current_price = get_current_price(coin['coin_id'].lower())
+        db.execute("""insert into price_history(date, coin, price) values(now(),%s,%s)""",[coin['coin_id'],current_price])
+
 
     # for each user, get the balance
     for user in users:
         # get wallet balances
         wallets = wallet_ballance(user["user_id"])
 
-        btc_worth = 0
-        eth_worth = 0
-        ltc_worth = 0
         total_spent = 0
+        total_value = 0
 
+        # for each coin type, fetch the value and aggregate it
         for wallet in wallets:
-            if wallet["coin_type"] == "btc":
-                btc_worth = float(wallet["balance"]) * current_btc_price
-            elif wallet["coin_type"] == "eth":
-                eth_worth = float(wallet["balance"]) * current_eth_price
-            elif wallet["coin_type"] == "ltc":
-                ltc_worth = float(wallet["balance"]) * current_ltc_price
-            #sum total spent
-            total_spent = total_spent + wallet["usd_spent"]
-  
-        total_value = round(btc_worth + eth_worth + ltc_worth,2)
+            current_price = db.fetchAll("""select * from price_history where coin = %s order by date desc limit 1""",[wallet['coin_type'].upper()])
 
+            total_spent = total_spent + wallet['usd_spent']
+            total_value = total_value + (wallet['balance'] * current_price[0]['price'])
+  
+        
         #write the record
-        db.runSql("""insert into performance_log (user_id,date,btc_value,ltc_value,eth_value,total_spent, total_value) values(%s,now(),%s,%s,%s,%s,%s)
-                    """,[user["user_id"],current_btc_price, current_ltc_price, current_eth_price,total_spent,total_value])
+        db.runSql("""insert into performance_log (user_id,date,total_spent, total_value) values(%s,now(),%s,%s)
+                    """,[user["user_id"],total_spent,round(total_value,2)])
 
     log_event("Performance logged")
     db.close()
