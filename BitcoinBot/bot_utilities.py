@@ -190,6 +190,17 @@ def get_current_price(type = "btc") :
         except :
             log_event("attempted to get the current Coinbase price and failed to get a response")
             return 0
+    elif coins[0]['source'] == "bitfinex" :
+        response = request("https://api.bitfinex.com/v1/pubticker/"+ type+"usd")
+        try:
+            curPrice = response["mid"]   
+            curPrice = round(float(curPrice),2) #convert to number
+
+            return curPrice
+
+        except :
+            log_event("attempted to get the current Bitfinex price and failed to get a response")
+            return 0
 
     return 0
 

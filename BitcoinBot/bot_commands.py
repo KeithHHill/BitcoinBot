@@ -138,7 +138,7 @@ def provide_profit_info(user,channel,command):
     # match the wallets with the coins and populate the current worth
     for wallet in wallets:
         for coin in coins :
-            if wallet["coin_type"] == coin["coin_id"].lower():
+            if wallet["coin_type"].lower() == coin["coin_id"].lower():
                 wallet["current_worth"] = wallet["balance"] * coin["current_value"]
         #sum total spent and worth
         total_spent = total_spent + wallet["usd_spent"]
