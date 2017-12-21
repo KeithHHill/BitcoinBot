@@ -140,6 +140,7 @@ def provide_profit_info(user,channel,command):
         for coin in coins :
             if wallet["coin_type"].lower() == coin["coin_id"].lower():
                 wallet["current_worth"] = wallet["balance"] * coin["current_value"]
+                break
         #sum total spent and worth
         total_spent = total_spent + wallet["usd_spent"]
         total_worth = total_worth + wallet["current_worth"]
@@ -434,7 +435,7 @@ def show_prices(user,channel,command) :
         
 
         # add to response
-        response = response + "*" + coin['coin_id'] + ":* $" + str(current_price) + " _(" + str(change_pct) + ")_ \n"
+        response = response + "*" + coin['coin_id'] + " " + coin['coin_name']+ ":* $" + str(current_price) + " _(" + str(change_pct) + ")_ \n"
 
     
     bot_utilities.post_to_channel(channel, response)

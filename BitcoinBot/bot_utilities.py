@@ -183,7 +183,10 @@ def get_current_price(type = "btc") :
         response = request("https://api.coinbase.com/v2/prices/"+ type+"-USD/spot")
         try:
             curPrice = response["data"]["amount"]   
-            curPrice = float(curPrice) #convert to number
+            if float(curPrice) < 0.01 :
+                curPrice = round(float(curPrice),4) #convert to number
+            else :
+                curPrice = round(float(curPrice),2) #convert to number
 
             return curPrice
 
@@ -194,12 +197,30 @@ def get_current_price(type = "btc") :
         response = request("https://api.bitfinex.com/v1/pubticker/"+ type+"usd")
         try:
             curPrice = response["mid"]   
-            curPrice = round(float(curPrice),2) #convert to number
+            if float(curPrice) < 0.01 :
+                curPrice = round(float(curPrice),4) #convert to number
+            else :
+                curPrice = round(float(curPrice),2) #convert to number
 
             return curPrice
 
         except :
             log_event("attempted to get the current Bitfinex price and failed to get a response")
+            return 0
+
+    elif coins[0]['source'] == "hitbtc" :
+        response = request("https://api.hitbtc.com/api/2/public/ticker/"+ type+"usd")
+        try:
+            curPrice = response["ask"]   
+            if float(curPrice) < 0.01 :
+                curPrice = round(float(curPrice),4) #convert to number
+            else :
+                curPrice = round(float(curPrice),2) #convert to number
+
+            return curPrice
+
+        except :
+            log_event("attempted to get the current HitBTC price and failed to get a response")
             return 0
 
     return 0
