@@ -37,7 +37,7 @@ def whats_balance(user,channel,command) :
     response = "Wallets:\n"
     for wallet in wallets :
         current_value = bot_utilities.get_current_price(wallet["coin_type"]) * float(wallet["balance"])
-        response = response + "*"+ wallet["coin_type"].upper() + ":* " + str(round(wallet["balance"],8)) + " _($" + str(round(current_value,2))+")_\n"
+        response = response + "*"+ wallet["coin_type"].upper()+ " " + wallet["coin_name"] + ":* " + str(round(wallet["balance"],8)) + " _($" + str(round(current_value,2))+")_\n"
 
     bot_utilities.log_event(user + " requested wallet balances: " + command)
     bot_utilities.post_to_channel(channel,response)
@@ -134,6 +134,7 @@ def provide_profit_info(user,channel,command):
 
     total_spent = 0
     total_worth = 0
+    cashed_out = 0
 
     # match the wallets with the coins and populate the current worth
     for wallet in wallets:
@@ -144,9 +145,10 @@ def provide_profit_info(user,channel,command):
         #sum total spent and worth
         total_spent = total_spent + wallet["usd_spent"]
         total_worth = total_worth + wallet["current_worth"]
+        cashed_out = cashed_out + wallet["usd_gained"]
   
     total_worth = round(total_worth,2)
-    total_change = total_worth-float(total_spent)  # worth-spent
+    total_change = round(Decimal(total_worth-float(total_spent)),2)  # worth-spent
 
     
     # fetch the values to compare to day/month
@@ -157,11 +159,11 @@ def provide_profit_info(user,channel,command):
     
     # get the change in value for the day
     try :
-        day_gain = day_record[0]["total_value"] - day_record[0]["total_spent"]
-        day_change_dec = ((Decimal(total_worth)-total_spent) - day_gain ) / day_gain
+        day_gain = abs(day_record[0]["total_value"]) - abs(day_record[0]["total_spent"])
+        day_change_dec = ((abs(Decimal(total_worth) + cashed_out -total_spent)) - abs(day_gain) ) / day_gain
         day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
         
-        day_growth_str = "$"+str(round(Decimal(total_change) - day_gain,2))
+        day_growth_str = "$"+str(round((Decimal(total_change) + cashed_out) - day_gain,2))
     except :
         day_change = ""
         day_growth_str = "error"
@@ -173,11 +175,13 @@ def provide_profit_info(user,channel,command):
     
     # get the change in value for the month
     try: 
-        month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"]
-        month_change_dec = ((Decimal(total_worth)-total_spent) - month_gain ) / month_gain
+        last_month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"] # what the gain was last month
+        month_change_dec = ((abs(Decimal(total_worth) + cashed_out - total_spent)) - abs(last_month_gain) ) / last_month_gain # compare the last month's gain to today's gain
         month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
         
-        month_growth_str = "$"+str(round(Decimal(total_change) - month_gain,2))
+        month_growth_str = "$"+str(round((Decimal(total_change) + cashed_out) - last_month_gain,2))
+
+
     except :
         month_change = ""
         month_growth_str = "error"
@@ -185,11 +189,12 @@ def provide_profit_info(user,channel,command):
     
     db.close()
 
-    
+    value_plus_cashed = round(Decimal(total_change) + cashed_out,2) # combine our wallet and our cashed out
 
     response = "*Spent:* $" + str(total_spent)+ "\n" \
         "*Value:* $" + str(total_worth) + "\n" \
-        "*CHANGE:* $" + str(total_change) + " _(" + bot_utilities.floored_percentage((Decimal(total_change)/total_spent),2) + ")_ \n \n" \
+        "*Cashed Out:* $" + str(cashed_out) + "\n" \
+        "*CHANGE:* $" + str(value_plus_cashed) + " _(" + bot_utilities.floored_percentage((Decimal(value_plus_cashed)/total_spent),2) + ")_ \n \n" \
         "_growth today: "+ day_growth_str + " (" + day_change + ")_\n" \
         "_30 day growth: " + month_growth_str + " (" + month_change+")_"
     
@@ -442,6 +447,24 @@ def show_prices(user,channel,command) :
 
     bot_utilities.log_event(user + " requested prices: " + command)
 
+
+
+# user wants a dump for all users in the server
+def server_report(user,channel, command) :
+    response = "generating server report: \n"
+    db = database.Database()
+    # get list of users
+    coin_users = db.fetchAll("select distinct p.user_id from purchases p")
+
+    # for each user, call the profit command
+    for coin_user in coin_users:
+        user_name = bot_utilities.get_slack_name(coin_user['user_id'])
+        response = response + "*" + user_name + ":* \n"
+        bot_utilities.post_to_channel(channel,response)
+        provide_profit_info(coin_user['user_id'],channel,command)
+
+    bot_utilities.log_event(user + " requested a server report")
+    db.close()
 
 
 

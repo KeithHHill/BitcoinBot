@@ -74,6 +74,10 @@ _______\n
         bot_commands.whats_balance(user,channel,command)
         deffered = True
 
+    elif command.startswith('server report') :
+        bot_commands.server_report(user,channel,command)
+        deffered = True
+
     elif command.startswith('i bought') :
         bot_commands.add_purchase(user,channel,command)
         deffered = True

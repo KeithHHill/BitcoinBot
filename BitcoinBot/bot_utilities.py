@@ -129,16 +129,20 @@ def user_is_active(user):
 
 def wallet_ballance(user) :
     db = database.Database()
+
+    # query makes the assumption: there cannot be a sale without a buy of a coin
     records = db.fetchAll("""
-                            select p.user_id, p.coin_type, sal.sold, sum(p.amount) as purchased, sal.usd_gained, sum(p.usd) as usd_spent,  sum(p.amount) - sal.sold as balance, 0.0 as current_worth from
+                            select p.user_id, upper(p.coin_type) as coin_type, coins.coin_name, sal.sold, sum(p.amount) as purchased, sal.usd_gained, sum(p.usd) as usd_spent,  sum(p.amount) - sal.sold as balance, 0.0 as current_worth from
                             (select s.user_id, s.coin_type, sum(s.amount) as sold, sum(s.usd) as usd_gained
                             from transactions s
                             where s.user_id = %s and s.type = "sale"
                             group by s.user_id, s.coin_type) as sal
 
                             right outer join transactions p on sal.user_id = p.user_id and sal.coin_type = p.coin_type
+                            inner join supported_coins coins on p.coin_type = coins.coin_id
                             where p.user_id = %s and p.type = "purchase"
                             group by p.user_id, p.coin_type
+                            order by coins.sort_order asc
                         """,[user, user])
 
     # clean records.  Replace nulls with 0
@@ -263,6 +267,7 @@ def log_performance():
 
         total_spent = 0
         total_value = 0
+        cashed_out = 0
 
         # for each coin type, fetch the value and aggregate it
         for wallet in wallets:
@@ -270,11 +275,14 @@ def log_performance():
 
             total_spent = total_spent + wallet['usd_spent']
             total_value = total_value + (wallet['balance'] * current_price[0]['price'])
+            cashed_out = cashed_out + wallet['usd_gained']
   
         
         #write the record
+
+
         db.runSql("""insert into performance_log (user_id,date,total_spent, total_value) values(%s,now(),%s,%s)
-                    """,[user["user_id"],total_spent,round(total_value,2)])
+                    """,[user["user_id"],total_spent,round(total_value + cashed_out,2)])
 
     log_event("Performance logged")
     db.close()
