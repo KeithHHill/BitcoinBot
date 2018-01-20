@@ -159,11 +159,17 @@ def provide_profit_info(user,channel,command):
     
     # get the change in value for the day
     try :
-        day_gain = abs(day_record[0]["total_value"]) - abs(day_record[0]["total_spent"])
-        day_change_dec = ((abs(Decimal(total_worth) + cashed_out -total_spent)) - abs(day_gain) ) / day_gain
-        day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
+        # day_gain = abs(day_record[0]["total_value"]) - abs(day_record[0]["total_spent"])
+        # day_change_dec = ((Decimal(total_worth) + cashed_out -total_spent) - day_gain ) / day_gain
+        # day_change = bot_utilities.floored_percentage(day_change_dec,2) # format to percentage
+
+        usd_spent_today = bot_utilities.usd_spent_in_x_days(user,1)
+
+        gain_from_yesterday = (Decimal(total_worth) + cashed_out) - day_record[0]["total_value"] - usd_spent_today # today's worth minus what the worth was yesterday
+        day_change = bot_utilities.floored_percentage(gain_from_yesterday / day_record[0]["total_value"],2) # get a perceent change
         
-        day_growth_str = "$"+str(round((Decimal(total_change) + cashed_out) - day_gain,2))
+        day_growth_str = "$"+str(round(gain_from_yesterday,2))
+
     except :
         day_change = ""
         day_growth_str = "error"
@@ -175,11 +181,16 @@ def provide_profit_info(user,channel,command):
     
     # get the change in value for the month
     try: 
-        last_month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"] # what the gain was last month
-        month_change_dec = ((abs(Decimal(total_worth) + cashed_out - total_spent)) - abs(last_month_gain) ) / last_month_gain # compare the last month's gain to today's gain
-        month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
+        # last_month_gain = month_record[0]["total_value"] - month_record[0]["total_spent"] # what the gain was last month
+        # month_change_dec = ((Decimal(total_worth) + cashed_out - total_spent) - last_month_gain ) / last_month_gain # compare the last month's gain to today's gain
+        # month_change = bot_utilities.floored_percentage(month_change_dec,2) # format to percentage
+
+        usd_spent_this_month = bot_utilities.usd_spent_in_x_days(user,30)
+
+        gain_from_last_month = (Decimal(total_worth) + cashed_out) - month_record[0]["total_value"] - usd_spent_this_month # today's worth minus what the worth was last month
+        month_change = bot_utilities.floored_percentage(gain_from_last_month / month_record[0]["total_value"],2) # get a perceent change
         
-        month_growth_str = "$"+str(round((Decimal(total_change) + cashed_out) - last_month_gain,2))
+        month_growth_str = "$"+str(round(gain_from_last_month,2))
 
 
     except :
@@ -462,6 +473,7 @@ def server_report(user,channel, command) :
         response = response + "*" + user_name + ":* \n"
         bot_utilities.post_to_channel(channel,response)
         provide_profit_info(coin_user['user_id'],channel,command)
+        response = ""
 
     bot_utilities.log_event(user + " requested a server report")
     db.close()

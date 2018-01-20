@@ -245,6 +245,20 @@ def user_is_adding_record(user, type) :
 
     return False
 
+# asked how much the user has spent in a certain number of days
+def usd_spent_in_x_days (user_id, days) :
+    spent = 0
+    db = database.Database()
+    records = db.fetchAll("select sum(usd_spent) as spent from purchases where user_id = %s and date > now() - interval %s day ",[user_id,days])
+
+    if records[0]['spent'] == None :
+        spent = 0
+    else : 
+        spent = records[0]['spent']
+
+    db.close()
+
+    return spent
 
 # called on a scheduled task to log current rates and values of wallets
 def log_performance():
